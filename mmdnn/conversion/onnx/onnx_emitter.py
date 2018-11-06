@@ -381,7 +381,7 @@ def KitModel(weight_file = None):
                 if pooling_type == 'AVG':
                     op_name = 'AveragePool'
                 elif pooling_type == 'MAX':
-                    op_name = 'MaxPool'                
+                    op_name = 'MaxPool'
                     count_include_pad = IR_node.get_attr('count_include_pad', 0)
                 kernel_shape = list(IR_node.get_attr('kernel_shape')[1:-1])
                 pads = IR_node.get_attr('pads')
