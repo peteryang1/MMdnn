@@ -92,12 +92,16 @@ def compute_tf_same_padding(input_shape, kernel_shape, strides, data_format='NHW
     if data_format.startswith('NC'):
         # Not tested
         input_shape = input_shape[2:]
+        if input_shape == [-1,-1]:
+            return [-1] * 8
         remove_dim = len(strides) - len(input_shape)
         if remove_dim > 0:
             strides = strides[remove_dim::]
 
     else:
         input_shape = input_shape[1:-1]
+        if input_shape == [-1,-1]:
+            return [-1] * 8
         remove_dim = len(input_shape) - len(strides) + 1
         if remove_dim < 0:
             strides = strides[1:remove_dim]

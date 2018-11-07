@@ -84,9 +84,9 @@ def KitModel(weight_file = None):
                                                                                              ', '.join(
                                                                                                  self.initializer))
                       )
-        self.add_body(1, "return helper.make_model(graph, opset_imports=[helper.make_opsetid('', 6)])")
-        # self.add_body(1, "model = helper.make_model(graph, opset_imports=[helper.make_opsetid('', 6)])")
-        # self.add_body(1, "return shape_inference.infer_shapes(model)")
+        # self.add_body(1, "return helper.make_model(graph, opset_imports=[helper.make_opsetid('', 6)])")
+        self.add_body(1, "model = helper.make_model(graph, opset_imports=[helper.make_opsetid('', 6)])")
+        self.add_body(1, "return shape_inference.infer_shapes(model)")
         return self.body_code
 
     def run(self, dstNetworkPath, dstWeightPath=None, phase='test'):
@@ -105,6 +105,19 @@ def KitModel(weight_file = None):
             self.weights_dict[IR_node.name]['weights'] = np.reshape(self.weights_dict[IR_node.name]['weights'], dims)
             self.weights_dict[IR_node.name]['weights'] = np.transpose(self.weights_dict[IR_node.name]['weights'], [dim - 2] + list(range(0, dim - 2)) + [dim - 1])
             self.weights_dict[IR_node.name]['weights'] = np.reshape(self.weights_dict[IR_node.name]['weights'], original_dims)
+    
+    def _shapeToStr(self, shapes):
+        ret = ""
+        first = True
+        for e in shapes.dim:
+            if first == False:
+                ret += ", "
+            if e.size != -1:
+                ret += str(e.size)
+            else:
+                ret += "\"*\""
+            first = False
+        return ret
 
     def _process_output_layers(self):
         for name in self.IR_graph.output_layers:
@@ -112,7 +125,7 @@ def KitModel(weight_file = None):
             # omit node of some type
             if IR_node.type == 'Shape' or IR_node.type == 'Pack':
                 continue
-
+                
             def repaire_output_shape(shape):
                 input_shape_list = []
                 for layer in self.IR_graph.topological_sort:
@@ -122,17 +135,16 @@ def KitModel(weight_file = None):
                             input_shape_list.pop()
                 if len(input_shape_list) == 0:
                     return
-                for i in range(0,len(shape.dim)):
-                    if shape.dim[i].size == -1:
-                        shape.dim[i].size = input_shape_list[0][i] if input_shape_list[0][i] != -1 else 1
                 if len(shape.dim) == 4:
                     temp = shape.dim[1].size
                     shape.dim[1].size = shape.dim[3].size
                     shape.dim[3].size = shape.dim[2].size
                     shape.dim[2].size = temp
+                for i in range(0,len(shape.dim)):
+                    shape.dim[i].size = -1 if shape.dim[i].size == -1 or input_shape_list[0][i] == -1 else shape.dim[i].size == -1
 
             repaire_output_shape(IR_node.layer.attr["_output_shapes"].list.shape[0])
-            shape_str = IRGraph.shapeToStr(IR_node.layer.attr["_output_shapes"].list.shape[0])
+            shape_str = self._shapeToStr(IR_node.layer.attr["_output_shapes"].list.shape[0])
             if IR_node.layer.attr['dtype'].type == graph_pb2.DT_UNDEFINED:
                 IR_node.layer.attr['dtype'].type = graph_pb2.DT_FLOAT32
             dtype_str = self.dtype_map[IR_node.layer.attr['dtype'].type]
@@ -144,7 +156,7 @@ def KitModel(weight_file = None):
             self.outputs.append(IR_node.variable_name + '_out')
 
     def emit_DataInput(self, IR_node):
-        shape = [dim.size if dim.size != -1 else 1 for dim in IR_node.IR_layer.attr["shape"].shape.dim]
+        shape = [dim.size if dim.size != -1 else "\"*\"" for dim in IR_node.IR_layer.attr["shape"].shape.dim]
         shape_str = ', '.join('%s' % i for i in shape)
         if IR_node.layer.attr['dtype'].type == graph_pb2.DT_UNDEFINED:
             IR_node.layer.attr['dtype'].type = graph_pb2.DT_FLOAT32
@@ -195,7 +207,8 @@ def KitModel(weight_file = None):
                               IR_node.variable_name + '_bias_array',
                               IR_node.variable_name + '_bias_array',
                               IR_node.variable_name + '_bias_array'))
-            self.add_body(1, "{:15} = helper.make_node('Conv', inputs=['{}', '{}', '{}'],outputs=['{}'], dilations={}, group={}, kernel_shape={}, pads={}, strides={})".format(
+            if -1 in pads:
+                self.add_body(1, "{:15} = helper.make_node('Conv', inputs=['{}', '{}', '{}'],outputs=['{}'], dilations={}, group={}, kernel_shape={}, auto_pad={}, strides={})".format(
                               IR_node.variable_name,
                               self.parent_variable_name(IR_node),
                               IR_node.variable_name + '_weight',
@@ -204,11 +217,24 @@ def KitModel(weight_file = None):
                               dilations,
                               group,
                               kernel_shape,
-                              pads,
+                              "\"SAME_LOWER\"",
                               strides))
+            else:
+                self.add_body(1, "{:15} = helper.make_node('Conv', inputs=['{}', '{}', '{}'],outputs=['{}'], dilations={}, group={}, kernel_shape={}, pads={}, strides={})".format(
+                                IR_node.variable_name,
+                                self.parent_variable_name(IR_node),
+                                IR_node.variable_name + '_weight',
+                                IR_node.variable_name + '_bias',
+                                IR_node.variable_name,
+                                dilations,
+                                group,
+                                kernel_shape,
+                                pads,
+                                strides))
             self.nodes.append(IR_node.variable_name + '_bias')
         else:
-            self.add_body(1, "{:15} = helper.make_node('Conv', inputs=['{}', '{}'],outputs=['{}'], dilations={}, group={}, kernel_shape={}, pads={}, strides={})".format(
+            if -1 in pads:
+                self.add_body(1, "{:15} = helper.make_node('Conv', inputs=['{}', '{}'],outputs=['{}'], dilations={}, group={}, kernel_shape={}, auto_pad={}, strides={})".format(
                               IR_node.variable_name,
                               self.parent_variable_name(IR_node),
                               IR_node.variable_name + '_weight',
@@ -216,8 +242,19 @@ def KitModel(weight_file = None):
                               dilations,
                               group,
                               kernel_shape,
-                              pads,
+                              "\"SAME_LOWER\"",
                               strides))
+            else:
+                self.add_body(1, "{:15} = helper.make_node('Conv', inputs=['{}', '{}'],outputs=['{}'], dilations={}, group={}, kernel_shape={}, pads={}, strides={})".format(
+                                IR_node.variable_name,
+                                self.parent_variable_name(IR_node),
+                                IR_node.variable_name + '_weight',
+                                IR_node.variable_name,
+                                dilations,
+                                group,
+                                kernel_shape,
+                                pads,
+                                strides))
         self.nodes.append(IR_node.variable_name + '_weight')
         self.nodes.append(IR_node.variable_name)
 
@@ -388,15 +425,26 @@ def KitModel(weight_file = None):
                 pad_length = len(pads)
                 pads = pads[1:pad_length // 2 - 1] + pads[pad_length // 2 + 1:pad_length - 1]
                 strides = list(IR_node.get_attr('strides')[1:-1])
-                self.add_body(1, "{:15} = helper.make_node('{}', inputs=['{}'],outputs=['{}'], kernel_shape={}, pads={}, strides={}{})".format(
+                if -1 in pads:
+                    self.add_body(1, "{:15} = helper.make_node('{}', inputs=['{}'],outputs=['{}'], kernel_shape={}, auto_pad={}, strides={}{})".format(
                                   IR_node.variable_name,
                                   op_name,
                                   self.parent_variable_name(IR_node),
                                   IR_node.variable_name,
                                   kernel_shape,
-                                  pads,
+                                  "\"SAME_LOWER\"",
                                   strides,
                                   "" if count_include_pad == 0 else ", count_include_pad=1"))
+                else:
+                    self.add_body(1, "{:15} = helper.make_node('{}', inputs=['{}'],outputs=['{}'], kernel_shape={}, pads={}, strides={}{})".format(
+                                    IR_node.variable_name,
+                                    op_name,
+                                    self.parent_variable_name(IR_node),
+                                    IR_node.variable_name,
+                                    kernel_shape,
+                                    pads,
+                                    strides,
+                                    "" if count_include_pad == 0 else ", count_include_pad=1"))
                 self.nodes.append(IR_node.variable_name)
             else:
                 print("OnnxEmitter has not supported Pool type [%s]." % (pooling_type))

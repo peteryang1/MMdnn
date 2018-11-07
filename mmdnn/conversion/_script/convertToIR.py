@@ -8,7 +8,7 @@ def _convert(args):
         inputshape = []
         for x in args.inputShape:
             shape = x.split(',')
-            inputshape.append([int(x) for x in shape])
+            inputshape.append([-1 if x == "None" else int(x) for x in shape])
     else:
         inputshape = [None]
     if args.srcFramework == 'caffe':

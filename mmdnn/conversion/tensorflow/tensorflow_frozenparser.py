@@ -136,6 +136,9 @@ class TensorflowParser2(Parser):
         with tensorflow.Graph().as_default() as g:
             input_map = {}
             for i in range(len(inputshape)):
+                for shape_index in range(0,len(inputshape[i])):
+                    if inputshape[i][shape_index] == -1:
+                        inputshape[i][shape_index] = None
                 if in_type_list[in_nodes[i]] == 1 or in_type_list[in_nodes[i]] == 0:
                     dtype = tensorflow.float32
                     x = tensorflow.placeholder(dtype, shape = [None] + inputshape[i])
@@ -771,9 +774,6 @@ class TensorflowParser2(Parser):
 
     def rename_Squeeze(self, source_node):
         IR_node = self._convert_identity_operation(source_node, new_op = 'Squeeze')
-        kwargs = {}
-        kwargs['squeeze_dims'] = source_node.get_attr('squeeze_dims')
-        assign_IRnode_values(IR_node, kwargs)
 
 
     def rename_Gather(self, source_node):
