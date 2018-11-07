@@ -141,7 +141,7 @@ def KitModel(weight_file = None):
                     shape.dim[3].size = shape.dim[2].size
                     shape.dim[2].size = temp
                 for i in range(0,len(shape.dim)):
-                    shape.dim[i].size = -1 if shape.dim[i].size == -1 or input_shape_list[0][i] == -1 else shape.dim[i].size == -1
+                    shape.dim[i].size = -1 if shape.dim[i].size == -1 or input_shape_list[0][i] == -1 else shape.dim[i].size 
 
             repaire_output_shape(IR_node.layer.attr["_output_shapes"].list.shape[0])
             shape_str = self._shapeToStr(IR_node.layer.attr["_output_shapes"].list.shape[0])
