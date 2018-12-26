@@ -128,7 +128,6 @@ def KitModel(weight_file = None):
 
             repaire_output_shape(IR_node.layer.attr["_output_shapes"].list.shape[0])
             if len(IR_node.layer.attr["_output_shapes"].list.shape[0].dim) == 4:
-                print("'" + IR_node.variable_name + "'")
                 self.body_code = self.body_code.replace("'" + IR_node.variable_name + "'","'" + IR_node.variable_name+"_non_transposed'")
                 self.add_body(1, "{:15} = helper.make_node('Transpose', inputs=['{}'], outputs=['{}'], perm=[0, 2, 3, 1])".format(
                     IR_node.variable_name+"_transpose",
