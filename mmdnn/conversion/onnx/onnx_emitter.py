@@ -125,13 +125,15 @@ def KitModel(weight_file = None):
                 for i in range(0,len(shape.dim)):
                     if shape.dim[i].size == -1:
                         shape.dim[i].size = input_shape_list[0][i] if input_shape_list[0][i] != -1 else 1
-                if len(shape.dim) == 4:
-                    temp = shape.dim[1].size
-                    shape.dim[1].size = shape.dim[3].size
-                    shape.dim[3].size = shape.dim[2].size
-                    shape.dim[2].size = temp
 
             repaire_output_shape(IR_node.layer.attr["_output_shapes"].list.shape[0])
+            if len(IR_node.layer.attr["_output_shapes"].list.shape[0].dim) == 4:
+                self.body_code = self.body_code.replace("outputs=['" + IR_node.variable_name + "'","outputs=['" + IR_node.variable_name+"_non_transposed'")
+                self.add_body(1, "{:15} = helper.make_node('Transpose', inputs=['{}'], outputs=['{}'], perm=[0, 2, 3, 1])".format(
+                    IR_node.variable_name+"_transpose",
+                    IR_node.variable_name + "_non_transposed",
+                    IR_node.variable_name))
+                self.nodes.append(IR_node.variable_name+"_transpose")
             shape_str = IRGraph.shapeToStr(IR_node.layer.attr["_output_shapes"].list.shape[0])
             if IR_node.layer.attr['dtype'].type == graph_pb2.DT_UNDEFINED:
                 IR_node.layer.attr['dtype'].type = graph_pb2.DT_FLOAT32
@@ -572,7 +574,7 @@ def KitModel(weight_file = None):
             self.nodes.append(IR_node.variable_name)
 
     def emit_Concat(self, IR_node):
-        axis = IR_node.get_attr('axis') + 2
+        axis = (IR_node.get_attr('axis') - 2) % 4
         inputs = ', '.join("'" + self.IR_graph.get_node(i).real_variable_name + "'" for i in IR_node.in_edges)
         self.add_body(1, "{:15} = helper.make_node('Concat', inputs=[{}], outputs=['{}'], axis={})".format(
             IR_node.variable_name,
