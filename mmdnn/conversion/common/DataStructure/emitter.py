@@ -32,7 +32,7 @@ class Emitter(object):
         import numpy as np
         self.weight_loaded = True
         try:
-            self.weights_dict = np.load(file_name).item()
+            self.weights_dict = np.load(file_name, allow_pickle=True).item()
         except:
             self.weights_dict = np.load(file_name, encoding='bytes').item()
 

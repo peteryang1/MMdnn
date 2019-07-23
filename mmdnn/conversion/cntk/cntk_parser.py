@@ -75,8 +75,8 @@ class CntkParser(Parser):
             cells = (output_size - 1) * stride + 1
             extra = input_size - cells
             center = extra // 2
-            pad[pad_upper_dim] = (kernel_size - 1) - (kernel_size - 1) // 2 - (extra - center)
-            pad[pad_lower_dim] = -(center - (kernel_size - 1) // 2)
+            pad[pad_upper_dim] = -(center - (kernel_size - 1) // 2)
+            pad[pad_lower_dim] = (kernel_size - 1) - (kernel_size - 1) // 2 - (extra - center)
 
 
 
