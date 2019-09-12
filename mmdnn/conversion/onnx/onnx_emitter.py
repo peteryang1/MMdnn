@@ -468,6 +468,13 @@ def KitModel(weight_file = None):
             IR_node.variable_name))
         self.nodes.append(IR_node.variable_name)
 
+    def emit_Sigmoid(self, IR_node):
+        self.add_body(1, "{:15} = helper.make_node('Sigmoid', inputs=['{}'], outputs=['{}'])".format(
+            IR_node.variable_name,
+            self.parent_variable_name(IR_node),
+            IR_node.variable_name))
+        self.nodes.append(IR_node.variable_name)
+
     def emit_Add(self, IR_node):
         input_layers = ', '.join(
             ("'" + self.IR_graph.get_parent(IR_node.name, [num]).real_variable_name) + "'" for num in
@@ -672,11 +679,21 @@ def KitModel(weight_file = None):
                           axes,
                           1 if IR_node.layer.attr['keepdims'].b else 0))
         self.nodes.append(IR_node.variable_name)
+    
+    def emit_Shuffle(self, IR_node):
+        self.add_body(1, "{:15} = helper.make_node('ChannelShuffle', inputs=['{}'], outputs=['{}'], group={})".format(
+            IR_node.variable_name,
+            self.parent_variable_name(IR_node),
+            IR_node.variable_name,
+            str(IR_node.get_attr('groups')[0])))
+        self.nodes.append(IR_node.variable_name)
 
     def emit_Reshape(self, IR_node):
-        shape = [item if item != -1 else 1 for item in IR_node.get_attr('shape')]
-        if len(shape) == 4:
-            shape = [shape[i] for i in [0, 3, 1, 2]]
+        shape = [item for item in IR_node.get_attr('shape')]
+        #if len(shape) == 4:
+        #    shape = [shape[i] for i in [0, 3, 1, 2]]
+        #if len(shape) == 5:
+        #    shape = [shape[i] for i in [0, 4, 1, 2, 3]]
         shape_str = ', '.join('%s' % i for i in shape)
         self.add_body(1, "{:15} = np.array([{}], dtype=np.int64)".format(
             IR_node.variable_name + '_shape_array',

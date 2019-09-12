@@ -89,6 +89,33 @@ class CntkParser(Parser):
 
 
     def gen_IR(self):
+        layers = len(self.src_graph.topological_sort)
+        i = 0
+        while i < layers:
+            current_node = self.src_graph.get_node(self.src_graph.topological_sort[i])
+            node_type = current_node.type
+            if hasattr(self, "rename_" + node_type):
+                if node_type == 'Reshape' and i + 2 < layers:
+                    next_node_type = self.src_graph.get_node(self.src_graph.topological_sort[i+1]).type
+                    if next_node_type == 'ReduceElements':
+                        self.rename_GlobalPooling(self.src_graph.get_node(self.src_graph.topological_sort[i-1]), current_node, self.src_graph.get_node(self.src_graph.topological_sort[i+1]))
+                        i += 1
+                    elif next_node_type == 'TransposeAxes':
+                        next_node_type2 = self.src_graph.get_node(self.src_graph.topological_sort[i+2]).type
+                        if next_node_type2 == 'Reshape':
+                            self.rename_Shuffle(current_node, self.src_graph.get_node(self.src_graph.topological_sort[i+1]), self.src_graph.get_node(self.src_graph.topological_sort[i+2]))
+                            i += 2
+                        else:
+                            self.rename_Reshape(current_node)
+                    else:
+                        self.rename_Reshape(current_node)
+                else:
+                    func = getattr(self, "rename_" + node_type)
+                    func(current_node)
+            else:
+                self.rename_UNKNOWN(current_node)
+            i += 1
+        '''
         for layer in self.src_graph.topological_sort:
             current_node = self.src_graph.get_node(layer)
             node_type = current_node.type
@@ -97,6 +124,7 @@ class CntkParser(Parser):
                 func(current_node)
             else:
                 self.rename_UNKNOWN(current_node)
+        '''
 
 
     @staticmethod
@@ -192,6 +220,7 @@ class CntkParser(Parser):
         kwargs['strides'] = [1] + list(attributes['strides'])[1:] + [1]
         kwargs['dilations'] = [1] + list(attributes['dilation'])[1:] + [1]
         kwargs['kernel_shape'] = list(W.shape)
+        kwargs['group'] = attributes['groups']
         padding = attributes['autoPadding'][1:]
 
         for pad in padding:
@@ -230,10 +259,28 @@ class CntkParser(Parser):
     def rename_Sub(self, source_node):
         self._convert_identity_operation(source_node)
 
+    def rename_Shuffle(self, source_node, next_node, next_node2):
+        IR_node = self.IR_graph.node.add()
+        IR_node.name = next_node2.real_name
+        IR_node.op = 'Shuffle'
+        kwargs = {}
+        assert next_node.layer.dtype in CntkParser.dtype_map, 'type [{}] is unknown.'.format(next_node.layer.dtype)
+        IR_node.attr["dtype"].type = CntkParser.dtype_map[next_node.layer.dtype]
+        shape =  (-1,) + next_node2.layer.shape
+        shape = CntkParser.channel_first_shape_to_IR(shape)
+        shape = list_to_shape(shape)
+        kwargs['_output_shapes'] = [shape]
+        groups = next_node.layer.shape[0]
+        kwargs['groups'] = [groups]
+        assign_IRnode_values(IR_node, kwargs)
+        IR_node.input.append(self.src_graph.get_node(source_node.in_edges[0]).real_name.lstrip('_'))
+    
+    def rename_Sigmoid(self, source_node):
+        self._convert_identity_operation(source_node, new_op='Sigmoid')
 
     def rename_Reshape(self, source_node):
         IR_node = self._convert_identity_operation(source_node)
-        new_shape = source_node.get_attr('newShape')
+        new_shape = [-1] + list(source_node.get_attr('newShape'))
         kwargs = {'shape' : self.channel_first_shape_to_IR(new_shape)}
         assign_IRnode_values(IR_node, kwargs)
 
@@ -349,6 +396,42 @@ class CntkParser(Parser):
         self._repair_padding_with_auto_pad_false(kwargs['pads'],source_node.get_attr('poolingWindowShape'),source_node.layer.arguments[0].shape,source_node.layer.shape,source_node.get_attr('strides'))
 
         assign_IRnode_values(IR_node, kwargs)
+    
+    def rename_GlobalPooling(self, previous_node, source_node, next_node):
+        
+        IR_node = self.IR_graph.node.add()
+        IR_node.name = next_node.real_name
+        IR_node.op = 'Pool'
+        dim = 4
+        kwargs = {}
+        shape =  [-1, previous_node.layer.shape[0], 1, 1]
+        shape = CntkParser.channel_first_shape_to_IR(shape)
+        shape = list_to_shape(shape)
+        kwargs['_output_shapes'] = [shape]
+        kwargs['strides'] = [1] * dim
+        kwargs['kernel_shape'] = list(previous_node.layer.shape) + [1]
+        kwargs['kernel_shape'][0] = 1
+        kwargs['pooling_type'] = 'AVG'
+        kwargs['auto_pad'] = 'VALID'
+        kwargs['pads'] = self._convert_padding_to_IR(kwargs['kernel_shape'][1:-1], [False] * (dim-1))
+        assign_IRnode_values(IR_node, kwargs)
+        IR_node.input.append(self.src_graph.get_node(source_node.in_edges[0]).real_name.lstrip('_'))
+
+        '''
+        IR_node = self.IR_graph.node.add()
+        IR_node.name = next_node.real_name
+        IR_node.op = 'GlobalPooling'
+        kwargs = {}
+        assert next_node.layer.dtype in CntkParser.dtype_map, 'type [{}] is unknown.'.format(next_node.layer.dtype)
+        IR_node.attr["dtype"].type = CntkParser.dtype_map[next_node.layer.dtype]
+        shape =  (-1,) + next_node.layer.shape
+        shape = CntkParser.channel_first_shape_to_IR(shape)
+        shape = list_to_shape(shape)
+        kwargs['_output_shapes'] = [shape]
+        assign_IRnode_values(IR_node, kwargs)
+        IR_node.input.append(self.src_graph.get_node(source_node.in_edges[0]).real_name.lstrip('_'))
+        '''
+
 
 
     def rename_DataInput(self, source_node):
