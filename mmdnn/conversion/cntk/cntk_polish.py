@@ -1,7 +1,7 @@
 import cntk
 
 def remove_ending_training_function(model):
-    extra_function_list = ['Combine', 'CrossEntropyWithSoftmax', 'ClassificationError', 'ElementTimes', 'AdditiveFullConnection', 'FeatureNormalize']
+    extra_function_list = ['Combine', 'CrossEntropyWithSoftmax', 'ClassificationError', 'ElementTimes', 'AdditiveFullConnection', 'FeatureNormalize','DistributedAdditiveFullConnection','DistributedCrossEntropyWithSoftmax']
     functionList = [model.root_function]
     visited = []
     while functionList:

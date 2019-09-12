@@ -298,7 +298,7 @@ class CntkParser(Parser):
     
     def rename_GlobalConcat(self, source_node):
         cur_segment = source_node.in_edges.pop()
-        if source_node.layer.attributes['segmentIndex'] != 0:
+        if source_node.layer.attributes['globalConcatSegmentIndex'] != 0:
             source_node.in_edges.append(self.last_segment)
         source_node.in_edges.append(cur_segment)
         IR_node = self._convert_identity_operation(source_node, new_op='Concat')
